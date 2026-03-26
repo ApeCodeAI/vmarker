@@ -5,6 +5,7 @@
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 """
 
+import re
 import shutil
 import time
 import uuid
@@ -20,6 +21,12 @@ from typing import Iterator
 
 BASE_DIR = Path(gettempdir()) / "vmarker"
 DEFAULT_MAX_AGE_HOURS = 24
+SESSION_ID_PATTERN = re.compile(r"^[0-9a-f]{12}$")
+
+
+def is_valid_session_id(session_id: str) -> bool:
+    """校验会话 ID，拒绝路径字符和非预期格式"""
+    return bool(SESSION_ID_PATTERN.fullmatch(session_id))
 
 
 # =============================================================================
@@ -39,16 +46,33 @@ class TempSession:
     5. 处理完成 / 异常 → 清理
     """
 
-    def __init__(self, session_id: str | None = None):
+    def __init__(self, session_id: str | None = None, create: bool = True):
         """
         初始化会话
 
         Args:
             session_id: 会话 ID，不提供则自动生成
+            create: 是否创建会话目录，默认创建
         """
-        self.session_id = session_id or uuid.uuid4().hex[:12]
+        if session_id is None:
+            self.session_id = uuid.uuid4().hex[:12]
+        else:
+            if not is_valid_session_id(session_id):
+                raise ValueError(f"invalid session_id: {session_id!r}")
+            self.session_id = session_id
         self.session_dir = BASE_DIR / self.session_id
-        self.session_dir.mkdir(parents=True, exist_ok=True)
+        if create:
+            self.session_dir.mkdir(parents=True, exist_ok=True)
+
+    @classmethod
+    def from_existing(cls, session_id: str) -> "TempSession | None":
+        """打开现有会话，不隐式创建目录"""
+        if not is_valid_session_id(session_id):
+            return None
+        session_dir = BASE_DIR / session_id
+        if not session_dir.is_dir():
+            return None
+        return cls(session_id=session_id, create=False)
 
     def save_upload(self, filename: str, content: bytes) -> Path:
         """
@@ -196,10 +220,11 @@ def get_session(session_id: str) -> TempSession | None:
     Returns:
         TempSession 实例，如果不存在返回 None
     """
-    session = TempSession(session_id)
-    return session if session.is_valid else None
+    return TempSession.from_existing(session_id)
 
 
 def session_exists(session_id: str) -> bool:
     """检查会话是否存在"""
-    return (BASE_DIR / session_id).exists()
+    if not is_valid_session_id(session_id):
+        return False
+    return (BASE_DIR / session_id).is_dir()
