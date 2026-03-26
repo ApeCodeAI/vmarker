@@ -32,6 +32,7 @@ MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
 MAX_DURATION = 300  # 5 分钟
 PARALLEL_THRESHOLD_SECONDS = 180  # 超过 3 分钟自动使用并行合成
 ALLOWED_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv", ".avi"}
+UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB
 
 
 # =============================================================================
@@ -133,16 +134,26 @@ async def upload_video(
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, f"不支持的文件格式: {ext}，支持: {', '.join(ALLOWED_EXTENSIONS)}")
 
-    # 读取文件内容
-    content = await file.read()
-
-    # 验证文件大小
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(400, f"文件大小超出限制 ({MAX_FILE_SIZE // 1024 // 1024}MB)")
-
-    # 创建会话并保存文件
     session = TempSession()
-    video_path = session.save_upload(f"source{ext}", content)
+    video_path = session.get_path(f"source{ext}")
+
+    # 流式写入上传内容，避免一次性读入整个文件
+    total_size = 0
+    try:
+        with video_path.open("wb") as output:
+            while chunk := await file.read(UPLOAD_CHUNK_SIZE):
+                total_size += len(chunk)
+                if total_size > MAX_FILE_SIZE:
+                    raise HTTPException(400, f"文件大小超出限制 ({MAX_FILE_SIZE // 1024 // 1024}MB)")
+                output.write(chunk)
+    except HTTPException:
+        session.cleanup()
+        raise
+    except Exception as e:
+        session.cleanup()
+        raise HTTPException(500, f"文件保存失败: {e}") from e
+    finally:
+        await file.close()
 
     # 探测视频信息
     try:
