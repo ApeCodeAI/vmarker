@@ -9,6 +9,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green.svg)](https://fastapi.tiangolo.com/)
+[![ApeCode.ai](https://img.shields.io/badge/🦧_Part_of_ApeCode.ai-orange?style=flat-square)](https://apecode.ai/zh)
 
 视频标记工具集 - 从 SRT 字幕自动生成透明章节进度条，提升长视频完播率
 
